@@ -1,55 +1,67 @@
 # SavvySuite
+
 Suite of tools for analysing off-target reads to find CNVs, homozygous regions, and shared haplotypes.
+
+**NOTE**: this is a forked repository with minor additions, primarily designed to fit SavvyCNV better into a 
+traditional build system.
 
 This software was written by Matthew Wakeling at the University of Exeter, and was presented at the 2017 ASHG meeting in Orlando, Florida.
 
 To cite this software, please use the following references. For SavvyCNV, use:
+
 > https://www.biorxiv.org/content/10.1101/617605v1
 
 For all other parts of SavvySuite, cite the ASHG conference presentation:
+
 > Wakeling, MN, De Franco E, Hattersley AT, Ellard S. Making the most of targeted sequencing: detecting CNVs and homozygous regions using offtarget reads with SavvyCNV. 67th Annual Meeting of the American Society of Human Genetics. Orlando, FL; 17–21 October 2017.
 
 and if desired, cite this web site too:
+
 > Wakeling MN. SavvySuite. 2018. https://github.com/rdemolgen/SavvySuite.
 
-## Running Java
-This code requires the htsjdk library and the JAMA matrix maths library. The easiest way to get everything required is to download the GATK Jar. All operations require this GATK jar and the SavvySuite java to be in the Java classpath, in order for Java to find it.
+## Running SavvyCNV
 
-This can be done in two ways. The first option is to set the CLASSPATH environment variable:
+This repository is constructed to use Gradle to build SavvyCNV, and the jar file created includes all dependencies.
+
+To run SavvyCNV, first build it using the compile instructions below. Then, you may run it easily using:
+
 ```
-export CLASSPATH=/path/to/GenomeAnalysisTK.jar:/path/to/SavvySuite/directory
+java -cp build/libs/SavvySuite-all.jar <command> ...
 ```
-The ":" character separates the two parts of this path, to specify that code can be found in the two places. The second option is to specify the "-cp" option every time you run java, like this:
-```
-java -cp /path/to/GenomeAnalysisTK.jar:/path/to/SavvySuite/directory blah blah blah
-```
-For all subsequent code fragments, where "java" or "javac" is specified, it is assumed that the classpath is correctly configured as specified above, either by adding the "-cp" option or using the CLASSPATH environment variable.
 
 If you have a large server, it is also sensible to add the -XX:ParallelGCThreads=2 -XX:ConcGCThreads=2 options to java, to prevent it creating too many garbage collection threads. This is a small performance enhancement, and is done like this:
+
 ```
 java -XX:ParallelGCThreads=2 -XX:ConcGCThreads=2 blah blah blah
 ```
 
 ## Compiling
-Compiling the code is then done by:
+
+The original SavvySuite used raw java commands to compile. In this version, compilation is done using Gradle:
+
 ```
-javac *.java
+./gradlew shadowJar
 ```
+
 in the SavvySuite directory.
 
 ## Usage
+
 This suite contains three separate tools for analysing off-target reads.
+
 ### SavvyCNV
 This software analyses the read depth of off-target reads to detect CNVs. It requires a reasonable number of samples sequenced using the same method. (Don't mix samples sequenced using different methods - it won't work well.) The sample data must be provided in aligned BAM files. First, each BAM file must be converted to a coverage summary file, with the following command:
 ```
-java -Xmx1g CoverageBinner sample.bam >sample.coverageBinner
+java -cp build/libs/SavvySuite-all.jar -Xmx1g CoverageBinner sample.bam >sample.coverageBinner
 ```
 This step can be performed in parallel on each sample, and will produce a file approximately 7MB in size. The operation requires very little RAM.
 
 To perform the analysis, the following command should be used:
+
 ```
-java -Xmx30g SavvyCNV -d (size) *.coverageBinner >cnv_list.csv 2>log_messages.txt
+java -cp build/libs/SavvySuite-all.jar -Xmx30g SavvyCNV -d (size) *.coverageBinner >cnv_list.csv 2>log_messages.txt
 ```
+
 The (size) parameter is the size of the chunks that the genome is split into. If you have targeted sequencing with three million reads and about 50% off target reads, then a chunk size of 200,000 is appropriate. It is sensible to process male and female samples separately if CNVs in the X/Y chromosomes are to be detected. If you have a lot of samples and SavvyCNV takes a long time, then please use the SelectControlSamples software described below.
 In addition, the following arguments can be provided:
 + -trans (transition probability) - This is the transition probability to use for the Viterbi algorithm. The default is 0.00001. To increase the sensitivity and false positive rate, increase this parameter.
@@ -136,14 +148,17 @@ java -Xmx30g SavvyCNV -d (size) case_sample.coverageBinner -control `java -Xmx30
 ```
 
 ### SavvyCNVJointCaller
+
 This software performs joint calling of CNVs in multiple samples. It is not suited to calling CNVs in large numbers of samples, but is intended to be used with multiple members of the same family. The algorithm favours CNVs starting and ending in the same location in multiple samples. This should reduce the incidence of (for example) false positive de novo CNVs being detected when CNVs are called independently in two parents and a child, if the CNV detected in the child is falsely detected as slightly larger than the CNV inherited from a parent.
 
 This software uses the output from SavvyCNV when it is given the "-data" option. SavvyCNV creates these files named after the input CoverageBinner files, with ".<bin_size>.data" appended.
 
 To perform the analysis, the following command should be used:
+
 ```
 java -Xmx30g SavvyCNVJointCaller *.coverageBinner.<bin_size>.data >cnv_list.csv 2>log_messages.txt
 ```
+
 Extra options are:
 + -trans (transition probability) - This is the transition probability to use for the Viterbi algorithm. The default is 0.00001. To increase the sensitivity and false positive rate, increase this parameter.
 + -mosaic - Switches the software into mosaic mode. Normally, the state probability calculations assume that the relative dosage is either <=0.5, 1, or >=1.5. Dosage levels must cross the mid-point between 1 and 0.5 or 1.5 before they become evidence of a CNV. This increases sensitivity and specificity at the cost of being able to detect mosaic CNVs. With this switch, mosaics can be detected. The size parameter will need to be increased, and small CNVs will not be detected as effectively.
@@ -283,6 +298,7 @@ This software searches for read pairs in a BAM file that have an abnormal insert
 This software analyses multiple BAM files. Events will be detected using the first BAM file specified on the command line, and then the statistics for that event are calculated for each of the BAM files, to work out whether the same event is present in each sample. This allows for a more effective method of determining whether events are de novo in a sample for instance, if the proband is specified as the first sample on the command line, and the parents are specified in addition.
 
 The command line arguments are:
+
 1. -limit (chromosome) (start) (end) - This will limit the analysis to just the specified region of the genome.
 2. -stddev - This will add additional columns to the output, containing information on the standard deviations of the read pair insert sizes.
 3. -maxInsert (number) - This changes the maximum insert size of a read pair for the read pair to be deemed "normal". Read pairs with an insert size greater than this are analysed. The default is 1000bp, but if you know the distribution of insert sizes for your sequence data, you can reduce this to match the very top of the distribution.
@@ -290,6 +306,7 @@ The command line arguments are:
 5. All other arguments are treated as BAM file names. Events are detected in the first BAM file and confirmed in all BAM files.
 
 The software produces one line of output for each event found. Each line is tab-separated with the following columns:
+
 1. The chromosome:position location of the event as it was found.
 2. "F" or "R" to indicate whether the reads participating in the event at this location are paired in the forward or reverse direction.
 3. The chromosome:position location of the read pairs of the reads in the event - this is an approximation of the position of "other end" of the event.

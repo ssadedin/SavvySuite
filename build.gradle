@@ -1,0 +1,28 @@
+
+plugins {
+    id 'com.github.johnrengelman.shadow' version '7.1.2'
+}
+
+apply plugin: 'java'
+apply plugin: 'eclipse'
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation group: 'org.broadinstitute', name: 'gatk', version: '4.2.6.1'
+    implementation group: 'com.github.samtools', name: 'htsjdk', version: '2.24.1'
+    implementation group: 'gov.nist.math', name: 'jama', version: '1.0.3'
+}
+
+configurations.all {
+    exclude group: "biz.k11i", module: "xgboost-predictor"
+}
+
+shadowJar {
+    dependencies {
+        exclude(dependency('biz.k11i:xgboost-predictor:0.3.0'))
+    }
+    minimize()
+}
